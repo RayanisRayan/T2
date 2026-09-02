@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: ticket-postgres
+
+    environment:
+      POSTGRES_USER: ticket_user
+      POSTGRES_PASSWORD: ticket_password
+      POSTGRES_DB: ticket_db
+
+    # ports:
+    #   - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticket_user -d ticket_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    image: python:3.13-slim
+    container_name: ticket-db-init
+
+    working_dir: /app
+
+    volumes:
+      - .:/app
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ticket_db
+      DB_USER: ticket_user
+      DB_PASSWORD: ticket_password
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    command: >
+      sh -c "pip install psycopg[binary] &&
+             python main.py"
+
+  api:
+    image: python:3.13-slim
+    container_name: ticket-api
+
+    working_dir: /app
+
+    volumes:
+      - .:/app
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ticket_db
+      DB_USER: ticket_user
+      DB_PASSWORD: ticket_password
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+    command: >
+      sh -c "pip install psycopg[binary] fastapi uvicorn &&
+             uvicorn api:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:
