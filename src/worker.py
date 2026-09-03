@@ -1,7 +1,7 @@
 from multiprocessing import Process
 import psycopg
 import os
-from psycopg import dic
+
 
 
 
@@ -22,5 +22,6 @@ if __name__=="__main__":
     worker_number=int(os.getenv("WORKERS",4))
     for i in range(worker_number):
         p=Process(target=worker, args=(conn,))
+        p.run()
 
         
