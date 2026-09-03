@@ -4,7 +4,6 @@ import psycopg
 import os
 
 
-
 conn = psycopg.connect(
     host=os.getenv("DB_HOST", "localhost"),
     port=os.getenv("DB_PORT", "5432"),
@@ -24,15 +23,16 @@ class Ticket(BaseModel):
     body: str | None = None
 
 @app.post("/tickets/", status_code=201)
+# TODO error handling
 def create_ticket(ticket: Ticket):
 
     created_ticket = conn.execute(
         """
-        INSERT INTO tickets (subject, body)
-        VALUES (%s, %s)
-        RETURNING id, subject, body;
+        INSERT INTO tickets (subject, body,status)
+        VALUES (%s, %s,%s)
+        RETURNING id,status,subject,body;
         """,
-        (ticket.subject, ticket.body)
+        (ticket.subject, ticket.body,'pending')
     ).fetchone()
 
     return created_ticket
@@ -42,7 +42,7 @@ def get_ticket(ticket_id: str):
 
     ticket = conn.execute(
         """
-        SELECT id, subject, body
+        SELECT *
         FROM tickets
         WHERE id = %s;
         """,
@@ -62,7 +62,7 @@ def get_tickets():
 
     tickets = conn.execute(
         """
-        SELECT id, subject, body
+        SELECT *
         FROM tickets
         ORDER BY id;
         """

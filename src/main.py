@@ -13,19 +13,48 @@ conn = psycopg.connect(
 
 with conn:
     with conn.cursor() as cursor:
-
+        # sequance creation: unimportant since it is just to match ticket structure
         cursor.execute("""
             CREATE SEQUENCE IF NOT EXISTS ticket_id_seq
             START 1001;
         """)
-
+        # enums
+        # block scripts to handle duplicate enums in case of restart
+        cursor.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE TYPE processing_state as ENUM ('pending','processing','classified','failed');
+                    EXCEPTION
+                        WHEN duplicate_object THEN null;
+                    END $$;
+                """)
+        cursor.execute("""
+                    DO $$
+                    BEGIN
+                    CREATE TYPE categories as ENUM ('billing', 'technical', 'account', 'other');
+                    EXCEPTION
+                        WHEN duplicate_object THEN null;
+                    END $$;
+        """)
+        cursor.execute("""
+                    DO $$
+                    BEGIN
+                    CREATE TYPE priorities as ENUM  ('low', 'medium', 'high');
+                    EXCEPTION
+                        WHEN duplicate_object THEN null;
+                    END $$;
+        """)
+        # table
+        # was gonna go with 2 tables, but since relationship between the proposed tables (ticket and inference) would be 1 to 1 we can just merge them 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 id TEXT PRIMARY KEY
                     DEFAULT ('t-' || nextval('ticket_id_seq')::TEXT),
-
-                subject TEXT NOT NULL,
-                body TEXT NOT NULL
+                subject TEXT,
+                body TEXT,
+                status processing_state,
+                category categories,
+                priority priorities
             );
         """)
 

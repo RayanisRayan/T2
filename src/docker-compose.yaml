@@ -85,13 +85,14 @@ services:
       DB_NAME: ticket_db
       DB_USER: ticket_user
       DB_PASSWORD: ticket_password
-
+      WORKERS: "${WORKERS}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
     depends_on:
       db-init:
         condition: service_completed_successfully
 
     command: >
-      sh -c "pip install psycopg[binary] && python worker.py"
+      sh -c "pip install psycopg[binary] openai && python worker.py"
 
 volumes:
   postgres_data:
