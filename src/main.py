@@ -51,13 +51,19 @@ with conn:
                 id TEXT PRIMARY KEY
                     DEFAULT ('t-' || nextval('ticket_id_seq')::TEXT),
                 subject TEXT,
-                body TEXT,
-                status processing_state,
+                body TEXT NOT NULL,
+                status processing_state NOT NULL,
                 category categories,
                 priority priorities
             );
         """)
-
+        # incase of restart and system shutting down with tickets mid processing
+        # We clean them up by updating all mid pricessing tickets to be pending again
+        cursor.execute("""
+                    UPDATE tickets 
+                    SET status='pending'
+                    WHERE status='processing'
+            """)
 
 print("Database initialized successfully.")
 
