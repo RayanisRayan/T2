@@ -20,26 +20,34 @@ app = FastAPI()
 
 class Ticket(BaseModel):
     subject: str | None = None
-    body: str | None = None
+    body: str
 
 @app.post("/tickets/", status_code=201)
-# TODO error handling
+
 def create_ticket(ticket: Ticket):
-
-    created_ticket = conn.execute(
-        """
-        INSERT INTO tickets (subject, body,status)
-        VALUES (%s, %s,%s)
-        RETURNING id,status,subject,body;
-        """,
-        (ticket.subject, ticket.body,'pending')
-    ).fetchone()
-
+    if ticket.subject is None:
+        created_ticket = conn.execute(
+            """
+            INSERT INTO tickets (body,status)
+            VALUES ( %s,%s)
+            RETURNING id,status,subject,body;
+            """,
+            ( ticket.body,'pending')
+        ).fetchone()
+    else:  
+                created_ticket = conn.execute(
+            """
+            INSERT INTO tickets (subject, body,status)
+            VALUES (%s, %s,%s)
+            RETURNING id,status,subject,body;
+            """,
+            (ticket.subject, ticket.body,'pending')
+        ).fetchone()
     return created_ticket
 
 @app.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: str):
-
+    
     ticket = conn.execute(
         """
         SELECT *
