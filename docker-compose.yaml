@@ -8,9 +8,6 @@ services:
       POSTGRES_PASSWORD: ticket_password
       POSTGRES_DB: ticket_db
 
-    # ports:
-    #   - "5432:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -24,10 +21,10 @@ services:
     image: python:3.13-slim
     container_name: ticket-db-init
 
-    working_dir: /app
+    working_dir: /project/src
 
     volumes:
-      - .:/app
+      - .:/project
 
     environment:
       DB_HOST: postgres
@@ -41,17 +38,17 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "pip install psycopg[binary] &&
-             python main.py"
+      sh -c "pip install -r /project/requirements.txt &&
+             python db_init.py"
 
   api:
     image: python:3.13-slim
     container_name: ticket-api
 
-    working_dir: /app
+    working_dir: /project/src
 
     volumes:
-      - .:/app
+      - .:/project
 
     environment:
       DB_HOST: postgres
@@ -68,16 +65,17 @@ services:
         condition: service_completed_successfully
 
     command: >
-      sh -c "pip install psycopg[binary] fastapi uvicorn &&
+      sh -c "pip install -r /project/requirements.txt &&
              uvicorn api:app --host 0.0.0.0 --port 8000"
+
   worker:
     image: python:3.13-slim
     container_name: worker-subsystem
 
-    working_dir: /app
+    working_dir: /project/src
 
     volumes:
-      - .:/app
+      - .:/project
 
     environment:
       DB_HOST: postgres
@@ -85,14 +83,16 @@ services:
       DB_NAME: ticket_db
       DB_USER: ticket_user
       DB_PASSWORD: ticket_password
-      WORKERS: "${WORKERS}"
+      WORKERS: "${WORKERS:-4}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
     depends_on:
       db-init:
         condition: service_completed_successfully
 
     command: >
-      sh -c "pip install psycopg[binary] openai && python worker.py"
+      sh -c "pip install -r /project/requirements.txt &&
+             python worker.py"
 
 volumes:
   postgres_data:
