@@ -20,29 +20,33 @@ def load_tickets(csv_path: str) -> list[dict]:
         reader = csv.DictReader(file)
 
         required_columns = {"id", "subject", "body"}
+
         if reader.fieldnames is None:
             raise ValueError("CSV file has no header.")
 
         missing = required_columns - set(reader.fieldnames)
+
         if missing:
             raise ValueError(
                 f"CSV is missing required column(s): {', '.join(sorted(missing))}"
             )
 
         for row_number, row in enumerate(reader, start=2):
-            source_id = (row.get("id") or "").strip()
+            ticket_id = (row.get("id") or "").strip()
             subject = row.get("subject") or ""
             body = row.get("body") or ""
 
-            if not source_id:
+            if not ticket_id:
                 raise ValueError(f"Row {row_number}: id is empty.")
 
             if not body.strip():
-                raise ValueError(f"Row {row_number} ({source_id}): body is empty.")
+                raise ValueError(
+                    f"Row {row_number} ({ticket_id}): body is empty."
+                )
 
             tickets.append(
                 {
-                    "source_id": source_id,
+                    "id": ticket_id,
                     "subject": subject,
                     "body": body,
                 }
@@ -52,9 +56,8 @@ def load_tickets(csv_path: str) -> list[dict]:
 
 
 def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
-    # The API/database generates its own ticket ID.
-    # CSV id is retained only as a test-case identifier.
     payload = {
+        "id": ticket["id"],
         "subject": ticket["subject"] or None,
         "body": ticket["body"],
     }
@@ -84,7 +87,7 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
                 response_body = raw_body
 
             return {
-                "source_id": ticket["source_id"],
+                "id": ticket["id"],
                 "success": 200 <= response.status < 300,
                 "status": response.status,
                 "elapsed": elapsed,
@@ -101,7 +104,7 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
             response_body = raw_body
 
         return {
-            "source_id": ticket["source_id"],
+            "id": ticket["id"],
             "success": False,
             "status": exc.code,
             "elapsed": elapsed,
@@ -112,7 +115,7 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
         elapsed = time.perf_counter() - started
 
         return {
-            "source_id": ticket["source_id"],
+            "id": ticket["id"],
             "success": False,
             "status": None,
             "elapsed": elapsed,
@@ -178,17 +181,12 @@ def main() -> int:
     results = []
 
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-        future_to_ticket = {
-            executor.submit(
-                send_ticket,
-                ticket,
-                args.url,
-                args.timeout,
-            ): ticket
+        futures = {
+            executor.submit(send_ticket, ticket, args.url, args.timeout): ticket
             for ticket in tickets
         }
 
-        for future in as_completed(future_to_ticket):
+        for future in as_completed(futures):
             result = future.result()
             results.append(result)
 
@@ -196,7 +194,7 @@ def main() -> int:
             outcome = "OK" if result["success"] else "FAIL"
 
             print(
-                f"[{outcome}] {result['source_id']} "
+                f"[{outcome}] {result['id']} "
                 f"status={status} "
                 f"time={result['elapsed']:.3f}s "
                 f"response={result['response']}"

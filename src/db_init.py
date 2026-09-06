@@ -13,11 +13,6 @@ conn = psycopg.connect(
 
 with conn:
     with conn.cursor() as cursor:
-        # sequance creation: unimportant since it is just to match ticket structure
-        cursor.execute("""
-            CREATE SEQUENCE IF NOT EXISTS ticket_id_seq
-            START 1001;
-        """)
         # enums
         # block scripts to handle duplicate enums in case of restart
         cursor.execute("""
@@ -55,11 +50,10 @@ with conn:
         # update
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
-                id TEXT PRIMARY KEY
-                    DEFAULT ('T-' || nextval('ticket_id_seq')::TEXT),
+                id TEXT PRIMARY KEY,
                 subject TEXT,
                 body TEXT NOT NULL,
-                status processing_state NOT NULL,
+                status processing_state NOT NULL DEFAULT 'pending',
                 category categories,
                 summary TEXT,
                 priority priorities,
