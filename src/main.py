@@ -46,24 +46,28 @@ with conn:
         """)
         # table
         # was gonna go with 2 tables, but since relationship between the proposed tables (ticket and inference) would be 1 to 1 we can just merge them 
+        # leased_until and lease_version are a solution for worker crashes
+        # a lease_until makes it so that workers have a set duration to work within
+        # if longer time is taken another worker will claim it
+        # lease_version will hanle race conditions if somehow
+        # multiple workers claimed the same ticket after 
+        # lease was up and then both managed to geenrate an
+        # update
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 id TEXT PRIMARY KEY
-                    DEFAULT ('t-' || nextval('ticket_id_seq')::TEXT),
+                    DEFAULT ('T-' || nextval('ticket_id_seq')::TEXT),
                 subject TEXT,
                 body TEXT NOT NULL,
                 status processing_state NOT NULL,
                 category categories,
-                priority priorities
+                summary TEXT,
+                priority priorities,
+                leased_until TIMESTAMPTZ,
+                lease_version BIGINT NOT NULL DEFAULT 0 
             );
         """)
-        # incase of restart and system shutting down with tickets mid processing
-        # We clean them up by updating all mid pricessing tickets to be pending again
-        cursor.execute("""
-                    UPDATE tickets 
-                    SET status='pending'
-                    WHERE status='processing'
-            """)
+
 
 print("Database initialized successfully.")
 
