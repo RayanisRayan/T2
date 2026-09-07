@@ -60,7 +60,7 @@ def create_ticket(ticket: Ticket):
 
     return created_ticket
 
-@app.get("/ticket/{ticket_id}")
+@app.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: str):
     
     ticket = conn.execute(
