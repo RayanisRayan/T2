@@ -27,6 +27,11 @@ VALID_PRIORITIES = {
     "high",
 }
 
+VALID_EXPECTED_STATUSES = {
+    "classified",
+    "failed",
+}
+
 
 def load_tickets(csv_path: str) -> list[dict]:
     tickets = []
@@ -34,7 +39,12 @@ def load_tickets(csv_path: str) -> list[dict]:
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
 
-        required_columns = {"id", "subject", "body"}
+        required_columns = {
+            "id",
+            "subject",
+            "body",
+            "expected_status",
+        }
 
         if reader.fieldnames is None:
             raise ValueError("CSV file has no header.")
@@ -43,13 +53,17 @@ def load_tickets(csv_path: str) -> list[dict]:
 
         if missing:
             raise ValueError(
-                f"CSV is missing required column(s): {', '.join(sorted(missing))}"
+                f"CSV is missing required column(s): "
+                f"{', '.join(sorted(missing))}"
             )
 
         for row_number, row in enumerate(reader, start=2):
             ticket_id = (row.get("id") or "").strip()
             subject = row.get("subject") or ""
             body = row.get("body") or ""
+            expected_status = (
+                row.get("expected_status") or ""
+            ).strip().lower()
 
             if not ticket_id:
                 raise ValueError(
@@ -61,11 +75,20 @@ def load_tickets(csv_path: str) -> list[dict]:
                     f"Row {row_number} ({ticket_id}): body is empty."
                 )
 
+            if expected_status not in VALID_EXPECTED_STATUSES:
+                raise ValueError(
+                    f"Row {row_number} ({ticket_id}): "
+                    f"invalid expected_status={expected_status!r}. "
+                    f"Expected one of "
+                    f"{sorted(VALID_EXPECTED_STATUSES)}."
+                )
+
             tickets.append(
                 {
                     "id": ticket_id,
                     "subject": subject,
                     "body": body,
+                    "expected_status": expected_status,
                 }
             )
 
@@ -99,7 +122,11 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
             elapsed = time.perf_counter() - started
 
             try:
-                response_body = json.loads(raw_body) if raw_body else None
+                response_body = (
+                    json.loads(raw_body)
+                    if raw_body
+                    else None
+                )
             except json.JSONDecodeError:
                 response_body = raw_body
 
@@ -113,10 +140,17 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
 
     except error.HTTPError as exc:
         elapsed = time.perf_counter() - started
-        raw_body = exc.read().decode("utf-8", errors="replace")
+        raw_body = exc.read().decode(
+            "utf-8",
+            errors="replace",
+        )
 
         try:
-            response_body = json.loads(raw_body) if raw_body else None
+            response_body = (
+                json.loads(raw_body)
+                if raw_body
+                else None
+            )
         except json.JSONDecodeError:
             response_body = raw_body
 
@@ -140,8 +174,15 @@ def send_ticket(ticket: dict, url: str, timeout: int) -> dict:
         }
 
 
-def get_ticket(ticket_id: str, base_url: str, timeout: int) -> dict:
-    ticket_url = f"{base_url.rstrip('/')}/{quote(ticket_id)}"
+def get_ticket(
+    ticket_id: str,
+    base_url: str,
+    timeout: int,
+) -> dict:
+
+    ticket_url = (
+        f"{base_url.rstrip('/')}/{quote(ticket_id)}"
+    )
 
     req = request.Request(
         url=ticket_url,
@@ -159,7 +200,11 @@ def get_ticket(ticket_id: str, base_url: str, timeout: int) -> dict:
             elapsed = time.perf_counter() - started
 
             try:
-                response_body = json.loads(raw_body) if raw_body else None
+                response_body = (
+                    json.loads(raw_body)
+                    if raw_body
+                    else None
+                )
             except json.JSONDecodeError:
                 response_body = raw_body
 
@@ -173,10 +218,17 @@ def get_ticket(ticket_id: str, base_url: str, timeout: int) -> dict:
 
     except error.HTTPError as exc:
         elapsed = time.perf_counter() - started
-        raw_body = exc.read().decode("utf-8", errors="replace")
+        raw_body = exc.read().decode(
+            "utf-8",
+            errors="replace",
+        )
 
         try:
-            response_body = json.loads(raw_body) if raw_body else None
+            response_body = (
+                json.loads(raw_body)
+                if raw_body
+                else None
+            )
         except json.JSONDecodeError:
             response_body = raw_body
 
@@ -200,7 +252,11 @@ def get_ticket(ticket_id: str, base_url: str, timeout: int) -> dict:
         }
 
 
-def validate_ticket(result: dict) -> tuple[bool, list[str]]:
+def validate_ticket(
+    result: dict,
+    expected_status: str,
+) -> tuple[bool, list[str]]:
+
     errors = []
 
     if not result["success"]:
@@ -212,33 +268,65 @@ def validate_ticket(result: dict) -> tuple[bool, list[str]]:
     ticket = result["response"]
 
     if not isinstance(ticket, dict):
-        errors.append("Response is not a JSON object.")
+        errors.append(
+            "Response is not a JSON object."
+        )
         return False, errors
 
     status = ticket.get("status")
+
+    # First validate the expected terminal state.
+    if status != expected_status:
+        errors.append(
+            f"Expected status={expected_status!r}, "
+            f"got {status!r}"
+        )
+        return False, errors
+
     category = ticket.get("category")
     priority = ticket.get("priority")
     summary = ticket.get("summary")
 
-    if status != "classified":
-        errors.append(
-            f"Expected status='classified', got {status!r}"
-        )
+    # Successfully classified tickets should contain
+    # valid inference output.
+    if expected_status == "classified":
 
-    if category not in VALID_CATEGORIES:
-        errors.append(
-            f"Invalid category: {category!r}"
-        )
+        if category not in VALID_CATEGORIES:
+            errors.append(
+                f"Invalid category: {category!r}"
+            )
 
-    if priority not in VALID_PRIORITIES:
-        errors.append(
-            f"Invalid priority: {priority!r}"
-        )
+        if priority not in VALID_PRIORITIES:
+            errors.append(
+                f"Invalid priority: {priority!r}"
+            )
 
-    if not isinstance(summary, str) or not summary.strip():
-        errors.append(
-            "Summary is missing or empty."
-        )
+        if (
+            not isinstance(summary, str)
+            or not summary.strip()
+        ):
+            errors.append(
+                "Summary is missing or empty."
+            )
+
+    # Failed tickets should fail closed and should not
+    # contain a classification result.
+    elif expected_status == "failed":
+
+        if category is not None:
+            errors.append(
+                f"Failed ticket contains category={category!r}"
+            )
+
+        if priority is not None:
+            errors.append(
+                f"Failed ticket contains priority={priority!r}"
+            )
+
+        if summary is not None:
+            errors.append(
+                f"Failed ticket contains summary={summary!r}"
+            )
 
     return len(errors) == 0, errors
 
@@ -246,7 +334,8 @@ def validate_ticket(result: dict) -> tuple[bool, list[str]]:
 def countdown(seconds: int) -> None:
     print()
     print(
-        f"Waiting {seconds} seconds for asynchronous classification..."
+        f"Waiting {seconds} seconds "
+        f"for asynchronous classification..."
     )
 
     for remaining in range(seconds, 0, -1):
@@ -265,15 +354,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Send customer-support tickets from a CSV file "
-            "and validate their asynchronous classification."
+            "and validate their expected asynchronous state."
         )
     )
 
     parser.add_argument(
         "csv_file",
         help=(
-            "Path to the CSV file containing "
-            "id, subject, and body columns."
+            "Path to the CSV file containing id, subject, "
+            "body, and expected_status columns."
         ),
     )
 
@@ -328,6 +417,11 @@ def main() -> int:
     if not tickets:
         print("No tickets found in CSV.")
         return 0
+
+    tickets_by_id = {
+        ticket["id"]: ticket
+        for ticket in tickets
+    }
 
     # ---------------------------------------------------------
     # Phase 1: Submit Tickets
@@ -401,7 +495,6 @@ def main() -> int:
         f"{submission_elapsed:.3f}s"
     )
 
-    # Nothing was successfully created.
     if not successful_results:
         print()
         print(
@@ -417,7 +510,7 @@ def main() -> int:
     countdown(VALIDATION_WAIT)
 
     # ---------------------------------------------------------
-    # Phase 3: Validate Results
+    # Phase 3: Validate Expected Behavior
     # ---------------------------------------------------------
 
     ticket_ids = [
@@ -448,14 +541,23 @@ def main() -> int:
         for future in as_completed(futures):
             result = future.result()
 
+            expected_status = (
+                tickets_by_id[result["id"]]
+                ["expected_status"]
+            )
+
             valid, validation_errors = (
-                validate_ticket(result)
+                validate_ticket(
+                    result,
+                    expected_status,
+                )
             )
 
             validation_results.append(
                 {
                     "id": result["id"],
                     "valid": valid,
+                    "expected_status": expected_status,
                     "errors": validation_errors,
                     "response": result["response"],
                 }
@@ -464,17 +566,26 @@ def main() -> int:
             if valid:
                 ticket = result["response"]
 
-                print(
-                    f"[PASS] {result['id']} "
-                    f"status={ticket['status']} "
-                    f"category={ticket['category']} "
-                    f"priority={ticket['priority']} "
-                    f"summary={ticket['summary']!r}"
-                )
+                if expected_status == "classified":
+                    print(
+                        f"[PASS] {result['id']} "
+                        f"status={ticket['status']} "
+                        f"category={ticket['category']} "
+                        f"priority={ticket['priority']} "
+                        f"summary={ticket['summary']!r}"
+                    )
+
+                else:
+                    print(
+                        f"[PASS] {result['id']} "
+                        f"status={ticket['status']} "
+                        f"expected={expected_status}"
+                    )
 
             else:
                 print(
-                    f"[FAIL] {result['id']}"
+                    f"[FAIL] {result['id']} "
+                    f"expected={expected_status}"
                 )
 
                 for validation_error in validation_errors:
@@ -500,6 +611,18 @@ def main() -> int:
     # Final Summary
     # ---------------------------------------------------------
 
+    expected_classified = sum(
+        1
+        for ticket in tickets
+        if ticket["expected_status"] == "classified"
+    )
+
+    expected_failed = sum(
+        1
+        for ticket in tickets
+        if ticket["expected_status"] == "failed"
+    )
+
     total_elapsed = (
         time.perf_counter() - started
     )
@@ -521,7 +644,16 @@ def main() -> int:
     )
 
     print()
-    print("Classification Validation:")
+    print("Expected Behavior:")
+    print(
+        f"  Classified: {expected_classified}"
+    )
+    print(
+        f"  Safe Failures: {expected_failed}"
+    )
+
+    print()
+    print("Behavior Validation:")
     print(
         f"  Passed:     {validation_successful}/"
         f"{len(validation_results)}"
@@ -540,7 +672,7 @@ def main() -> int:
         return 2
 
     print()
-    print("All tests passed.")
+    print("All expected behaviors passed.")
 
     return 0
 
