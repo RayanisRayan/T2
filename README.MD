@@ -27,7 +27,7 @@ The workflow above highlights the Architecture required to provide the main func
 
   - **GET `/tickets/`**: Retrieves Tickets with optional `category` and `priority` filtering and pagination.
 
-- **Database**: We use **PostgreSQL** as our DB engine as PostgreSQL is simple, efficient, and highly Stable we utilize a DB as our **database work queuing** system utilizing various PostgreSQL capabilities to our advantage. An example is **FOR UPDATE SKIP LOCKED** which provides a highly efficient way to prevent race conditions in initial queries. Here is our database schema:
+- **Database**: We use **PostgreSQL** as our DB engine as PostgreSQL is simple, efficient, and highly Stable we utilize a DB as our **database work queuing** system utilizing various PostgreSQL capabilities to our advantage. An example is **FOR UPDATE SKIP LOCKED** which provides a highly efficient way to prevent race conditions in initial queries.
   Our Ticket schema is structured as follows:
 
   | Field           | Type               | Description                                                                     |
